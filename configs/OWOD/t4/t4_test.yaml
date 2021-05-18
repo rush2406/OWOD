@@ -1,6 +1,6 @@
 _BASE_: "../../Base-RCNN-C4-OWOD.yaml"
 MODEL:
-  WEIGHTS: "/home/joseph/workspace/OWOD/output/t4_ft/model_final.pth"
+  WEIGHTS: "/home/student/OWOD/output/t4_ft/model_final.pth"
   ROI_HEADS:
     NMS_THRESH_TEST: 0.4
 TEST:

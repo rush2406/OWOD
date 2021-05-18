@@ -9,8 +9,8 @@ T3_CLASS_NAMES = [
 ]
 
 # Train
-coco_annotation_file = '/home/joseph/workspace/datasets/mscoco/annotations/instances_train2017.json'
-dest_file = '/home/joseph/workspace/OWOD/datasets/coco17_voc_style/ImageSets/t3_train.txt'
+coco_annotation_file = '/home/student/datasets/mscoco/annotations/instances_train2017.json'
+dest_file = '/home/student/OWOD/datasets/coco17_voc_style/ImageSets/t3_train.txt'
 
 coco_instance = COCO(coco_annotation_file)
 
@@ -33,8 +33,8 @@ with open(dest_file, 'w') as file:
 print('Created train file')
 
 # Test
-coco_annotation_file = '/home/joseph/workspace/datasets/mscoco/annotations/instances_val2017.json'
-dest_file = '/home/joseph/workspace/OWOD/datasets/coco17_voc_style/ImageSets/t3_test.txt'
+coco_annotation_file = '/home/student/datasets/mscoco/annotations/instances_val2017.json'
+dest_file = '/home/student/OWOD/datasets/coco17_voc_style/ImageSets/t3_test.txt'
 
 coco_instance = COCO(coco_annotation_file)
 
@@ -55,7 +55,7 @@ with open(dest_file, 'w') as file:
         file.write(str(image_id)+'\n')
 print('Created test file')
 
-dest_file = '/home/joseph/workspace/OWOD/datasets/coco17_voc_style/ImageSets/t3_test_unk.txt'
+dest_file = '/home/student/OWOD/datasets/coco17_voc_style/ImageSets/t3_test_unk.txt'
 with open(dest_file, 'w') as file:
     for image_id in image_ids:
         file.write(str(image_id)+'\n')
