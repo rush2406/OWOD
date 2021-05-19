@@ -1,12 +1,12 @@
 _BASE_: "../../Base-RCNN-C4-OWOD.yaml"
 MODEL:
-  WEIGHTS: "/home/fk1/workspace/OWOD/output/t4_ft/model_final.pth"
+  WEIGHTS: "/home/student/OWOD/output/t4_ft/model_final.pth"
 DATASETS:
   TRAIN: ('t4_voc_coco_2007_ft', )
   TEST: ('voc_coco_2007_test', )
 SOLVER:
   STEPS: (155500, 156500)
-  MAX_ITER: 160500
+  MAX_ITER: 321000
   WARMUP_ITERS: 0
 OUTPUT_DIR: "./output/t4_ft"
 OWOD:
