@@ -23,13 +23,13 @@ python tools/train_net.py --num-gpus 1 --eval-only --config-file ./configs/OWOD/
 # Task 2
 cp -r /home/student/OWOD/output/t1/. /home/student/OWOD/output/t2
 
-python tools/train_net.py --num-gpus 1 --dist-url='tcp://127.0.0.1:52127' --resume --config-file ./configs/OWOD/t2/t2_train.yaml SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.005 OUTPUT_DIR "./output/t2" MODEL.WEIGHTS "/home/student/OWOD/output/t2/model_final.pth"
+python tools/train_net.py --num-gpus 1 --dist-url='tcp://127.0.0.1:52127' --resume --config-file ./configs/OWOD/t2/t2_train.yaml SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.01 OUTPUT_DIR "./output/t2" MODEL.WEIGHTS "/home/student/OWOD/output/t2/model_final.pth"
 
 cp -r /home/student/OWOD/output/t2/. /home/student/OWOD/output/t2_ft
 
-python tools/train_net.py --num-gpus 1 --dist-url='tcp://127.0.0.1:52126' --resume --config-file ./configs/OWOD/t2/t2_ft.yaml SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.005 OUTPUT_DIR "./output/t2_ft" MODEL.WEIGHTS "/home/student/OWOD/output/t2_ft/model_final.pth"
+python tools/train_net.py --num-gpus 1 --dist-url='tcp://127.0.0.1:52126' --resume --config-file ./configs/OWOD/t2/t2_ft.yaml SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.01 OUTPUT_DIR "./output/t2_ft" MODEL.WEIGHTS "/home/student/OWOD/output/t2_ft/model_final.pth"
 
-python tools/train_net.py --num-gpus 1 --dist-url='tcp://127.0.0.1:52133' --config-file ./configs/OWOD/t2/t2_val.yaml SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.005 OWOD.TEMPERATURE 1.5 OUTPUT_DIR "./output/t2_final" MODEL.WEIGHTS "/home/student/OWOD/output/t2_ft/model_final.pth"
+python tools/train_net.py --num-gpus 1 --dist-url='tcp://127.0.0.1:52133' --config-file ./configs/OWOD/t2/t2_val.yaml SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.01 OWOD.TEMPERATURE 1.5 OUTPUT_DIR "./output/t2_final" MODEL.WEIGHTS "/home/student/OWOD/output/t2_ft/model_final.pth"
 
 python tools/train_net.py --num-gpus 1 --eval-only --config-file ./configs/OWOD/t2/t2_test.yaml SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.005 OUTPUT_DIR "./output/t2_final" MODEL.WEIGHTS "/home/student/OWOD/output/t2_ft/model_final.pth"
 
