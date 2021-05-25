@@ -15,6 +15,7 @@ from detectron2.config import configurable
 from detectron2.layers import Linear, ShapeSpec, batched_nms, cat, nonzero_tuple
 from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.structures import Boxes, Instances
+from detectron2.layers.soft_nms import batched_soft_nms
 from detectron2.utils.events import get_event_storage
 from detectron2.utils.store import Store
 
@@ -127,7 +128,12 @@ def fast_rcnn_inference_single_image(
     logits = logits[filter_inds[:,0]]
 
     # 2. Apply NMS for each class independently.
-    keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
+    #keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
+    #print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+    keep, soft_nms_scores = batched_soft_nms(
+    boxes,scores,filter_inds[:, 1],'linear',0.5,nms_thresh,0.001)
+    scores[keep] = soft_nms_scores
+    
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
