@@ -16,6 +16,7 @@ from detectron2.layers import Linear, ShapeSpec, batched_nms, cat, nonzero_tuple
 from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.structures import Boxes, Instances
 from detectron2.layers.soft_nms import batched_soft_nms
+from detectron2.utils.losses import compute_diou
 from detectron2.utils.events import get_event_storage
 from detectron2.utils.store import Store
 
@@ -306,6 +307,16 @@ class FastRCNNOutputs:
                 self._predict_boxes()[fg_inds[:, None], gt_class_cols],
                 self.gt_boxes.tensor[fg_inds],
                 reduction="sum",
+            )
+        elif self.box_reg_loss_type == "diou":
+            gt_proposal_deltas = self.box2box_transform.get_deltas(
+                self.proposals.tensor, self.gt_boxes.tensor
+            )
+            loss_box_reg = compute_diou(
+                self.pred_proposal_deltas[fg_inds[:, None], gt_class_cols],
+                gt_proposal_deltas[fg_inds],
+                self.box2box_transform.weights,
+                self.box2box_transform.scale_clamp
             )
         else:
             raise ValueError(f"Invalid bbox reg loss type '{self.box_reg_loss_type}'")

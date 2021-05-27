@@ -10,6 +10,7 @@ from detectron2.layers import ShapeSpec, cat
 from detectron2.structures import Boxes, ImageList, Instances, pairwise_iou
 from detectron2.utils.events import get_event_storage
 from detectron2.utils.memory import retry_if_cuda_oom
+from detectron2.utils.losses import compute_diou
 from detectron2.utils.registry import Registry
 
 from ..anchor_generator import build_anchor_generator
@@ -381,6 +382,16 @@ class RPN(nn.Module):
             pos_mask = pos_mask.view(-1)
             localization_loss = giou_loss(
                 pred_proposals[pos_mask], cat(gt_boxes)[pos_mask], reduction="sum"
+            )
+        elif self.box_reg_loss_type == "diou":
+            anchors = type(anchors[0]).cat(anchors).tensor  # Ax(4 or 5)
+            gt_anchor_deltas = [self.box2box_transform.get_deltas(anchors, k) for k in gt_boxes]
+            gt_anchor_deltas = torch.stack(gt_anchor_deltas)  # (N, sum(Hi*Wi*Ai), 4 or 5)
+            localization_loss = compute_diou(
+                cat(pred_anchor_deltas, dim=1)[pos_mask],
+                gt_anchor_deltas[pos_mask],
+                self.box2box_transform.weights,
+                self.box2box_transform.scale_clamp
             )
         else:
             raise ValueError(f"Invalid rpn box reg loss type '{self.box_reg_loss_type}'")
