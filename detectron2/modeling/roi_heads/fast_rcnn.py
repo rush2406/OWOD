@@ -129,11 +129,10 @@ def fast_rcnn_inference_single_image(
     logits = logits[filter_inds[:,0]]
 
     # 2. Apply NMS for each class independently.
-    #keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
+    keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
     #print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-    keep, soft_nms_scores = batched_soft_nms(
-    boxes,scores,filter_inds[:, 1],'gaussian',0.5,nms_thresh,0.001)
-    scores[keep] = soft_nms_scores
+    #keep, soft_nms_scores = batched_soft_nms(boxes,scores,filter_inds[:, 1],'gaussian',0.5,nms_thresh,0.001)
+    #scores[keep] = soft_nms_scores
     
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
