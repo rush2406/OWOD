@@ -245,10 +245,27 @@ def _soft_nms(
             decay = torch.exp(-torch.pow(ious, 2) / gaussian_sigma)
         elif method == "hard":  # standard NMS
             decay = (ious < linear_threshold).float()
+        elif method == 'voting':
+            decay = torch.exp(-torch.pow(ious, 2) / gaussian_sigma)
+            scores *= decay
+            sigma_t = 0.002
+            ioumask = ious>0
+            klbox = boxes[ioumask]
+            klbox = torch.cat((klbox, top_box.unsqueeze(0)), 0)
+            kliou = ious[ioumask]
+            klvar = scores/ious
+            pi = torch.exp(-1 * torch.pow((1 - kliou), 2) / sigma_t)
+            pi = torch.cat((pi, torch.ones(1).cuda()), 0).unsqueeze(1)
+            pi = pi / klvar
+            pi = pi / pi.sum(0)
+            pi = torch.sum(pi,dim=1,keepdims=True)
+            #print(pi.shape)
+            #print(klbox.shape)
+            boxes[top_idx] = (pi * klbox[:, :4]).sum(0)
         else:
             raise NotImplementedError("{} soft nms method not implemented.".format(method))
 
-        scores *= decay
+        #scores *= decay
         keep = scores > prune_threshold
         keep[top_idx] = False
 

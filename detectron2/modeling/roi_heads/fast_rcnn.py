@@ -131,7 +131,7 @@ def fast_rcnn_inference_single_image(
     #keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
     #print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
     keep, soft_nms_scores = batched_soft_nms(
-    boxes,scores,filter_inds[:, 1],'linear',0.5,nms_thresh,0.001)
+    boxes,scores,filter_inds[:, 1],'voting',0.5,nms_thresh,0.001)
     scores[keep] = soft_nms_scores
     
     if topk_per_image >= 0:
