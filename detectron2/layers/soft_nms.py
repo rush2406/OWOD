@@ -301,11 +301,12 @@ def _soft_nms(
             decay = (ious < linear_threshold).float()
         elif method == 'diou':
             ## to change, very slow
-            decay = torch.ones_like(ious)
-            d = [compute_RDIoU(top_box.unsqueeze(0), boxes[b].unsqueeze(0)) for b in range(boxes.shape[0])]
-            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-            di = torch.Tensor(d).to(device)
-            decay = (ious - di) > linear_threshold
+            #decay = torch.ones_like(ious)
+            #print(top_box.shape.unsqueeze(0))
+            d = compute_RDIoU(top_box.unsqueeze(0), boxes)
+            #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            #di = torch.Tensor(d).to(device)
+            decay = ((ious - d) < linear_threshold).float()
         else:
             raise NotImplementedError("{} soft nms method not implemented.".format(method))
         #print(ious.shape)
