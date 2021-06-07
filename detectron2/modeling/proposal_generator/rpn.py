@@ -448,6 +448,7 @@ class RPN(nn.Module):
         proposals = self.predict_proposals(
             anchors, pred_objectness_logits, pred_anchor_deltas, images.image_sizes
         )
+
         return proposals, losses
 
     def predict_proposals(
@@ -471,6 +472,7 @@ class RPN(nn.Module):
         # are also network responses.
         with torch.no_grad():
             pred_proposals = self._decode_proposals(anchors, pred_anchor_deltas)
+            #print(pred_proposals[0].size())
             return find_top_rpn_proposals(
                 pred_proposals,
                 pred_objectness_logits,

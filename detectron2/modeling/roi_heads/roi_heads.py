@@ -16,6 +16,7 @@ from detectron2.layers import ShapeSpec, nonzero_tuple
 from detectron2.structures import Boxes, ImageList, Instances, pairwise_iou
 from detectron2.utils.events import get_event_storage
 from detectron2.utils.registry import Registry
+from detectron2.layers.soft_nms import batched_soft_nms
 
 from ..backbone.resnet import BottleneckBlock, ResNet
 from ..matcher import Matcher
@@ -389,6 +390,7 @@ class Res5ROIHeads(ROIHeads):
         self.enable_clustering = cfg.OWOD.ENABLE_CLUSTERING
         self.compute_energy_flag = cfg.OWOD.COMPUTE_ENERGY
         self.energy_save_path = os.path.join(cfg.OUTPUT_DIR, cfg.OWOD.ENERGY_SAVE_PATH)
+        self.post_nms_topk = cfg.MODEL.RPN.POST_NMS_TOPK_TRAIN
         # fmt: on
         assert not cfg.MODEL.KEYPOINT_ON
         assert len(self.in_features) == 1
@@ -458,12 +460,38 @@ class Res5ROIHeads(ROIHeads):
         """
         See :meth:`ROIHeads.forward`.
         """
+
+        size = images.image_sizes
         del images
 
         if self.training:
             assert targets
             proposals = self.label_and_sample_proposals(proposals, targets)
         del targets
+
+        ## Added nms stage after labelling
+        temp = []
+        for x in proposals:
+
+            boxes = (x.proposal_boxes).tensor
+            ids = x.gt_classes
+            scores = x.objectness_logits
+
+            keep, soft_nms_scores = batched_soft_nms(boxes,scores,ids,'gaussian',0.5,0.5,0.001)
+            scores[keep] = soft_nms_scores
+
+            keep = keep[:self.post_nms_topk]
+
+            p = Instances(size)
+            p.proposal_boxes = x.proposal_boxes[keep]
+            p.objectness_logits = scores[keep]
+            p.gt_classes = ids[keep]
+            p.gt_boxes = x.gt_boxes[keep]
+
+            temp.append(p)
+
+        proposals = temp
+
 
         proposal_boxes = [x.proposal_boxes for x in proposals]
         box_features = self._shared_roi_transform(

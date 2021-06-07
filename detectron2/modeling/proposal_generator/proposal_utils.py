@@ -78,6 +78,8 @@ def find_top_rpn_proposals(
     topk_scores = cat(topk_scores, dim=1)
     topk_proposals = cat(topk_proposals, dim=1)
     level_ids = cat(level_ids, dim=0)
+    #print(topk_proposals.size()) #<---------
+
 
     # 3. For each image, run a per-level NMS, and choose topk results.
     results: List[Instances] = []
@@ -112,7 +114,8 @@ def find_top_rpn_proposals(
         # As a result, the training behavior becomes batch-dependent,
         # and the configuration "POST_NMS_TOPK_TRAIN" end up relying on the batch size.
         # This bug is addressed in Detectron2 to make the behavior independent of batch size.
-        keep = keep[:post_nms_topk]  # keep is already sorted
+        keep = keep[:2*post_nms_topk]  # keep is already sorted
+
 
         res = Instances(image_size)
         res.proposal_boxes = boxes[keep]
