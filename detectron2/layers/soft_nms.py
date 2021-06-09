@@ -2,8 +2,61 @@ import torch
 
 from detectron2.structures import Boxes, RotatedBoxes, pairwise_iou, pairwise_iou_rotated
 
+def compute_RDIoU(pred, target, eps=1e-7):
+    r"""`Implementation of Distance-IoU Loss: Faster and Better
+    Learning for Bounding Box Regression, https://arxiv.org/abs/1911.08287`_.
+    Code is modified from https://github.com/Zzh-tju/DIoU.
+    Args:
+        pred (Tensor): Predicted bboxes of format (x1, y1, x2, y2),
+            shape (n, 4).
+        target (Tensor): Corresponding gt bboxes, shape (n, 4).
+        eps (float): Eps to avoid log(0).
+    Return:
+        Tensor: Loss tensor.
+    """
+    # overlap
+    lt = torch.max(pred[:, :2], target[:, :2])
+    rb = torch.min(pred[:, 2:], target[:, 2:])
+    wh = (rb - lt).clamp(min=0)
+    overlap = wh[:, 0] * wh[:, 1]
 
-def soft_nms(boxes, scores, method, gaussian_sigma, linear_threshold, prune_threshold):
+    # union
+    ap = (pred[:, 2] - pred[:, 0]) * (pred[:, 3] - pred[:, 1])
+    ag = (target[:, 2] - target[:, 0]) * (target[:, 3] - target[:, 1])
+    union = ap + ag - overlap + eps
+
+    # IoU
+    ious = overlap / union
+
+    # enclose area
+    enclose_x1y1 = torch.min(pred[:, :2], target[:, :2])
+    enclose_x2y2 = torch.max(pred[:, 2:], target[:, 2:])
+    enclose_wh = (enclose_x2y2 - enclose_x1y1).clamp(min=0)
+
+    cw = enclose_wh[:, 0]
+    ch = enclose_wh[:, 1]
+
+    c2 = cw ** 2 + ch ** 2 + eps
+
+    b1_x1, b1_y1 = pred[:, 0], pred[:, 1]
+    b1_x2, b1_y2 = pred[:, 2], pred[:, 3]
+    b2_x1, b2_y1 = target[:, 0], target[:, 1]
+    b2_x2, b2_y2 = target[:, 2], target[:, 3]
+
+    left = ((b2_x1 + b2_x2) - (b1_x1 + b1_x2)) ** 2 / 4
+    right = ((b2_y1 + b2_y2) - (b1_y1 + b1_y2)) ** 2 / 4
+    rho2 = left + right
+
+    # DIoU
+    #dious = ious - rho2 / c2
+    #loss = 1 - dious
+
+    #loss = loss.sum()
+
+    return rho2 / c2
+
+
+def soft_nms(boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold):
     """
     Performs soft non-maximum suppression algorithm on axis aligned boxes
     Args:
@@ -35,6 +88,7 @@ def soft_nms(boxes, scores, method, gaussian_sigma, linear_threshold, prune_thre
         pairwise_iou,
         boxes,
         scores,
+        idxs,
         method,
         gaussian_sigma,
         linear_threshold,
@@ -122,11 +176,11 @@ def batched_soft_nms(
     # we add an offset to all the boxes. The offset is dependent
     # only on the class idx, and is large enough so that boxes
     # from different classes do not overlap
-    max_coordinate = boxes.max()
-    offsets = idxs.to(boxes) * (max_coordinate + 1)
-    boxes_for_nms = boxes + offsets[:, None]
+    #max_coordinate = boxes.max()
+    #offsets = idxs.to(boxes) * (max_coordinate + 1)
+    #boxes_for_nms = boxes + offsets[:, None]
     return soft_nms(
-        boxes_for_nms, scores, method, gaussian_sigma, linear_threshold, prune_threshold
+        boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold
     )
 
 
@@ -186,6 +240,7 @@ def _soft_nms(
     pairwise_iou_func,
     boxes,
     scores,
+    idxs,
     method,
     gaussian_sigma,
     linear_threshold,
@@ -222,6 +277,12 @@ def _soft_nms(
             by Soft NMS, sorted in decreasing order of scores
             [1]: float tensor with the re-scored scores of the elements that were kept
     """
+
+    max_coordinate = boxes.max()
+    offsets = idxs.to(boxes) * (max_coordinate + 1)
+    boxes = boxes + offsets[:, None]
+    idxs_orig = idxs
+
     boxes = boxes.clone()
     scores = scores.clone()
     idxs = torch.arange(scores.size()[0])
@@ -231,6 +292,11 @@ def _soft_nms(
 
     while scores.numel() > 0:
         top_idx = torch.argmax(scores)
+        if(idxs_orig[top_idx]==80):
+            linear_threshold=0.7
+        else:
+            linear_threshold = 0.5
+
         idxs_out.append(idxs[top_idx].item())
         scores_out.append(scores[top_idx].item())
 
@@ -245,6 +311,9 @@ def _soft_nms(
             decay = torch.exp(-torch.pow(ious, 2) / gaussian_sigma)
         elif method == "hard":  # standard NMS
             decay = (ious < linear_threshold).float()
+        elif method == 'diou':
+            d = compute_RDIoU(top_box.unsqueeze(0), boxes)
+            decay = ((ious - d) < linear_threshold).float()
         else:
             raise NotImplementedError("{} soft nms method not implemented.".format(method))
 
@@ -255,5 +324,6 @@ def _soft_nms(
         boxes = boxes[keep]
         scores = scores[keep]
         idxs = idxs[keep]
+        idxs_orig = idxs_orig[keep]
 
     return torch.tensor(idxs_out).to(boxes.device), torch.tensor(scores_out).to(scores.device)
