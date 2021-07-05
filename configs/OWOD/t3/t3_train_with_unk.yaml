@@ -1,6 +1,6 @@
 _BASE_: "../../Base-RCNN-C4-OWOD.yaml"
 MODEL:
-  WEIGHTS: "/home/student/OWOD/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
+  WEIGHTS: "/home/20020076/OWOD/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
 DATASETS:
   TRAIN: ('t3_voc_coco_2007_val_with_known_and_unk', )
   TEST: ('voc_coco_2007_test', )
