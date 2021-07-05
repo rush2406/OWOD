@@ -293,7 +293,7 @@ def _soft_nms(
     while scores.numel() > 0:
         top_idx = torch.argmax(scores)
         if(idxs_orig[top_idx]==80):
-            linear_threshold=0.7
+            linear_threshold=0.4
         else:
             linear_threshold = 0.5
 
