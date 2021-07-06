@@ -72,9 +72,9 @@ class PascalVOCDetectionEvaluator(DatasetEvaluator):
 
 
     def create_distribution(self, scale, shape, shift):
-        wd = Weibull(scale=scale, concentration=shape)
+        wd = Weibull(scale=scale, concentration=shape,validate_args=False)
         transforms = AffineTransform(loc=shift, scale=1.)
-        weibull = TransformedDistribution(wd, transforms)
+        weibull = TransformedDistribution(wd, transforms,validate_args=False)
         return weibull
 
     def compute_prob(self, x, distribution):
