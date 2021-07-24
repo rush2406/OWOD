@@ -7,7 +7,7 @@ MODEL:
     #    NUM_CLASSES: 81 # 0-79 Known class; 80 -> Unknown; 81 -> Background.
     NUM_CLASSES: 81
     NAME: "Res5ROIHeads"
-  WEIGHTS: "/home/20020076/OWOD/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
+  WEIGHTS: "/home/u20020076/OWOD/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
   MASK_ON: False
   RESNETS:
     DEPTH: 50

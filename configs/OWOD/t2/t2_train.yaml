@@ -1,6 +1,6 @@
 _BASE_: "../../Base-RCNN-C4-OWOD.yaml"
 MODEL:
-  WEIGHTS: "/home/20020076/OWOD/output/t2/model_final.pth"
+  WEIGHTS: "/home/u20020076/OWOD/output/t2/model_final.pth"
 DATASETS:
   TRAIN: ('t2_voc_coco_2007_train', ) # t1_voc_coco_2007_train, t1_voc_coco_2007_ft
   TEST: ('voc_coco_2007_test', )
