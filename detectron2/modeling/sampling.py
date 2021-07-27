@@ -1,5 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import torch
+import heapq
 
 from detectron2.layers import nonzero_tuple
 
@@ -7,7 +8,7 @@ __all__ = ["subsample_labels"]
 
 
 def subsample_labels(
-    labels: torch.Tensor, num_samples: int, positive_fraction: float, bg_label: int
+    labels: torch.Tensor, num_samples: int, positive_fraction: float, bg_label: int, objectness_logits: torch.Tensor = None, ohem=None
 ):
     """
     Return `num_samples` (or fewer, if not enough found)
@@ -47,8 +48,15 @@ def subsample_labels(
 
     # randomly select positive and negative examples
     perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos]
+
+    #getting the instances with high objectness scores from backgrounds
+    #perm2 = list(zip(*heapq.nlargest(num_neg, enumerate(objectness_logits), key=operator.itemgetter(1))))[0]
     perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg]
 
     pos_idx = positive[perm1]
-    neg_idx = negative[perm2]
-    return pos_idx, neg_idx
+    if(ohem is None):
+        neg_idx = negative[perm2]
+    else:
+        neg_idx = negative[torch.randperm(negative.numel(), device=negative.device)]
+
+    return pos_idx, neg_idx,num_neg

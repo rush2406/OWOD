@@ -255,7 +255,7 @@ class RPN(nn.Module):
         Args:
             labels (Tensor): a vector of -1, 0, 1. Will be modified in-place and returned.
         """
-        pos_idx, neg_idx = subsample_labels(
+        pos_idx, neg_idx, num_neg = subsample_labels(
             label, self.batch_size_per_image, self.positive_fraction, 0
         )
         # Fill with the ignore label (-1), then set positive and negative labels

@@ -237,7 +237,7 @@ class FastRCNNOutputs:
                 storage.put_scalar("fast_rcnn/fg_cls_accuracy", fg_num_accurate / num_fg)
                 storage.put_scalar("fast_rcnn/false_negative", num_false_negative / num_fg)
 
-    def softmax_cross_entropy_loss(self):
+    def softmax_cross_entropy_loss(self,mode="mean"):
         """
         Compute the softmax cross entropy loss for box classification.
 
@@ -250,14 +250,14 @@ class FastRCNNOutputs:
             self._log_accuracy()
             self.pred_class_logits[:, self.invalid_class_range] = -10e10
             # self.log_logits(self.pred_class_logits, self.gt_classes)
-            return F.cross_entropy(self.pred_class_logits, self.gt_classes, reduction="mean")
+            return F.cross_entropy(self.pred_class_logits, self.gt_classes, reduction=mode)
 
     def log_logits(self, logits, cls):
         data = (logits, cls)
         location = '/home/fk1/workspace/OWOD/output/logits/' + shortuuid.uuid() + '.pkl'
         torch.save(data, location)
 
-    def box_reg_loss(self):
+    def box_reg_loss(self,mode="sum"):
         """
         Compute the smooth L1 loss for box regression.
 
@@ -299,7 +299,7 @@ class FastRCNNOutputs:
                 self.pred_proposal_deltas[fg_inds[:, None], gt_class_cols],
                 gt_proposal_deltas[fg_inds],
                 self.smooth_l1_beta,
-                reduction="sum",
+                reduction=mode,
             )
         elif self.box_reg_loss_type == "giou":
             loss_box_reg = giou_loss(
@@ -338,6 +338,17 @@ class FastRCNNOutputs:
     they are used to query information about the head predictions.
     """
 
+    def losses2(self):
+        """
+        Compute the default losses for box head in Fast(er) R-CNN,
+        with softmax cross entropy loss and smooth L1 loss.
+
+        Returns:
+            A dict of losses (scalar tensors) containing keys "loss_cls" and "loss_box_reg".
+        """
+        
+        return {"loss_cls": self.softmax_cross_entropy_loss('none'), "loss_box_reg": self.box_reg_loss('none')}
+
     def losses(self):
         """
         Compute the default losses for box head in Fast(er) R-CNN,
@@ -346,6 +357,7 @@ class FastRCNNOutputs:
         Returns:
             A dict of losses (scalar tensors) containing keys "loss_cls" and "loss_box_reg".
         """
+        
         return {"loss_cls": self.softmax_cross_entropy_loss(), "loss_box_reg": self.box_reg_loss()}
 
     def predict_boxes(self):
@@ -665,7 +677,7 @@ class FastRCNNOutputLayers(nn.Module):
     #     return ae_loss
 
     # TODO: move the implementation to this class.
-    def losses(self, predictions, proposals, input_features=None):
+    def losses(self, predictions, proposals, input_features=None,ohem=None):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -677,7 +689,18 @@ class FastRCNNOutputLayers(nn.Module):
             Dict[str, Tensor]: dict of losses
         """
         scores, proposal_deltas = predictions
-        losses = FastRCNNOutputs(
+        if ohem is not None:
+            losses = FastRCNNOutputs(
+            self.box2box_transform,
+            scores,
+            proposal_deltas,
+            proposals,
+            self.invalid_class_range,
+            self.smooth_l1_beta,
+            self.box_reg_loss_type,
+        ).losses2()
+        else:
+            losses = FastRCNNOutputs(
             self.box2box_transform,
             scores,
             proposal_deltas,
@@ -686,6 +709,7 @@ class FastRCNNOutputLayers(nn.Module):
             self.smooth_l1_beta,
             self.box_reg_loss_type,
         ).losses()
+
         if input_features is not None:
             # losses["loss_cluster_encoder"] = self.get_ae_loss(input_features)
             losses["loss_clustering"] = self.get_clustering_loss(input_features, proposals)
