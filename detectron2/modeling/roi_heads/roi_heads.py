@@ -232,11 +232,11 @@ class ROIHeads(torch.nn.Module):
             total_loss = loss_dict['loss_cls'] + loss_dict['loss_clustering']
 
             #sort based on loss
-            sorted_idxs = torch.argsort(total_loss, dim=-1, descending=True)
-            sorted_loss = torch.index_select(total_loss, 0, sorted_idxs)
-            sample_sorted_idxs = torch.index_select(sampled_idxs, 0, sorted_idxs)
+            #sorted_idxs = torch.argsort(total_loss, dim=-1, descending=True)
+            #sorted_loss = torch.index_select(total_loss, 0, sorted_idxs)
+            #sample_sorted_idxs = torch.index_select(sampled_idxs, 0, sorted_idxs)
 
-            return sample_sorted_idxs[:num_neg]
+            #return sample_sorted_idxs[:num_neg]
 
             #ADDED.........................
 
@@ -244,12 +244,18 @@ class ROIHeads(torch.nn.Module):
             #sorted_boxes = torch.index_select((proposals_with_gt[0].proposal_boxes).tensor, 0, sorted_idxs)
 
             #nms
-            #keep, soft_nms_scores = _soft_nms(Boxes,pairwise_iou,sorted_boxes,sorted_loss,sample_sorted_idxs,'diou',0.5,0.7,0.001)
+            x = proposals_with_gt[0]
+
+            keep, soft_nms_scores = batched_soft_nms((x.proposal_boxes).tensor,total_loss,x.gt_classes,'diou',0.5,0.7,0.001)
+            
+            #keep, soft_nms_scores = _soft_nms(Boxes,pairwise_iou,(x.proposal_boxes).tensor,total_loss,x.gt_classes,'diou',0.5,0.7,0.001)
 
             #keep = keep[:num_neg]
-            #sample_sorted_idxs = sample_sorted_idxs[keep]
 
-            #return sample_sorted_idxs            
+            sample_sorted_idxs = sampled_idxs[keep]
+
+            #per image choosing 64 hard proposals - total no of proposals = 256
+            return sample_sorted_idxs[:64]           
 
 
     def _sample_proposals(
@@ -289,10 +295,13 @@ class ROIHeads(torch.nn.Module):
             gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes, objectness_logits,'ohem')
 
         #OHEM
-        sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
+        #sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
 
-
+        #all proposals - foreground+background
         sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
+
+        sampled_idxs = self.apply_ohem(sampled_idxs,gt_classes[sampled_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
+       
         gt_classes_ss = gt_classes[sampled_idxs]
 
         if self.enable_thresold_autolabelling:

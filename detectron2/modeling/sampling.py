@@ -53,10 +53,12 @@ def subsample_labels(
     #perm2 = list(zip(*heapq.nlargest(num_neg, enumerate(objectness_logits), key=operator.itemgetter(1))))[0]
     perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg]
 
-    pos_idx = positive[perm1]
+    
     if(ohem is None):
         neg_idx = negative[perm2]
+        pos_idx = positive[perm1]
     else:
         neg_idx = negative[torch.randperm(negative.numel(), device=negative.device)]
+        pos_idx = positive[torch.randperm(positive.numel(), device=positive.device)]
 
     return pos_idx, neg_idx,num_neg
