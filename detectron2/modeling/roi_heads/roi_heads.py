@@ -22,7 +22,7 @@ from ..backbone.resnet import BottleneckBlock, ResNet
 from ..matcher import Matcher
 from ..poolers import ROIPooler
 from ..proposal_generator.proposal_utils import add_ground_truth_to_proposals
-from ..sampling import subsample_labels
+from ..sampling import subsample_labels,subsample_negative_labels
 from .box_head import build_box_head
 from .fast_rcnn import FastRCNNOutputLayers
 from .keypoint_head import build_keypoint_head
@@ -247,15 +247,16 @@ class ROIHeads(torch.nn.Module):
             x = proposals_with_gt[0]
 
             keep, soft_nms_scores = batched_soft_nms((x.proposal_boxes).tensor,total_loss,x.gt_classes,'diou',0.5,0.7,0.001)
-            
-            #keep, soft_nms_scores = _soft_nms(Boxes,pairwise_iou,(x.proposal_boxes).tensor,total_loss,x.gt_classes,'diou',0.5,0.7,0.001)
-
-            #keep = keep[:num_neg]
 
             sample_sorted_idxs = sampled_idxs[keep]
 
-            #per image choosing 64 hard proposals - total no of proposals = 256
-            return sample_sorted_idxs[:64]           
+            if(sample_sorted_idxs.shape[0] < num_neg):
+
+                #resample and concat
+                extra_ids = subsample_negative_labels(sampled_idxs, num_neg-sample_sorted_idxs.shape[0])
+                sample_sorted_idxs.append(extra_ids)
+
+            return sample_sorted_idxs           
 
 
     def _sample_proposals(
@@ -296,12 +297,12 @@ class ROIHeads(torch.nn.Module):
 
         #OHEM
         #sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
+        
 
-        #all proposals - foreground+background
+        sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
+       
         sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
 
-        sampled_idxs = self.apply_ohem(sampled_idxs,gt_classes[sampled_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
-       
         gt_classes_ss = gt_classes[sampled_idxs]
 
         if self.enable_thresold_autolabelling:

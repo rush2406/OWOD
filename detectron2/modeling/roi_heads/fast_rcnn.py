@@ -347,7 +347,7 @@ class FastRCNNOutputs:
             A dict of losses (scalar tensors) containing keys "loss_cls" and "loss_box_reg".
         """
         
-        return {"loss_cls": self.softmax_cross_entropy_loss('none'), "loss_box_reg": self.box_reg_loss('none')}
+        return {"loss_cls": self.softmax_cross_entropy_loss('none'), "loss_box_reg": self.box_reg_loss('sum')}
 
     def losses(self):
         """
@@ -588,7 +588,7 @@ class FastRCNNOutputLayers(nn.Module):
         # self.feature_store.add(self.ae_model.encoder(features), gt_classes)
 
 
-    def clstr_loss_l2_cdist(self, input_features, proposals):
+    def clstr_loss_l2_cdist(self, input_features, proposals,mode='mean'):
         """
         Get the foreground input_features, generate distributions for the class,
         get probability of each feature from each distribution;
@@ -632,7 +632,7 @@ class FastRCNNOutputLayers(nn.Module):
 
         return loss
 
-    def get_clustering_loss(self, input_features, proposals):
+    def get_clustering_loss(self, input_features, proposals,mode):
         if not self.enable_clustering:
             return 0
 
@@ -646,7 +646,7 @@ class FastRCNNOutputLayers(nn.Module):
                 else:
                     mu = torch.tensor(item).mean(dim=0)
                     self.means[index] = mu
-            c_loss = self.clstr_loss_l2_cdist(input_features, proposals)
+            c_loss = self.clstr_loss_l2_cdist(input_features, proposals,mode)
             # Freeze the parameters when clustering starts
             # for param in self.ae_model.parameters():
         elif storage.iter > self.clustering_start_iter:
@@ -665,7 +665,7 @@ class FastRCNNOutputLayers(nn.Module):
                         self.means[i] = self.clustering_momentum * mean + \
                                         (1 - self.clustering_momentum) * new_means[i]
 
-            c_loss = self.clstr_loss_l2_cdist(input_features, proposals)
+            c_loss = self.clstr_loss_l2_cdist(input_features, proposals,mode)
         return c_loss
 
     # def get_ae_loss(self, input_features):
@@ -699,6 +699,7 @@ class FastRCNNOutputLayers(nn.Module):
             self.smooth_l1_beta,
             self.box_reg_loss_type,
         ).losses2()
+
         else:
             losses = FastRCNNOutputs(
             self.box2box_transform,
@@ -711,8 +712,9 @@ class FastRCNNOutputLayers(nn.Module):
         ).losses()
 
         if input_features is not None:
-            # losses["loss_cluster_encoder"] = self.get_ae_loss(input_features)
-            losses["loss_clustering"] = self.get_clustering_loss(input_features, proposals)
+            losses["loss_clustering"] = self.get_clustering_loss(input_features, proposals,'mean')
+
+        
         return {k: v * self.loss_weight.get(k, 1.0) for k, v in losses.items()}
 
     def inference(self, predictions, proposals):
