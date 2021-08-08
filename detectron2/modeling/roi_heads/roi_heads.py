@@ -22,7 +22,7 @@ from ..backbone.resnet import BottleneckBlock, ResNet
 from ..matcher import Matcher
 from ..poolers import ROIPooler
 from ..proposal_generator.proposal_utils import add_ground_truth_to_proposals
-from ..sampling import subsample_labels,subsample_negative_labels
+from ..sampling import subsample_labels_iou
 from .box_head import build_box_head
 from .fast_rcnn import FastRCNNOutputLayers
 from .keypoint_head import build_keypoint_head
@@ -250,18 +250,20 @@ class ROIHeads(torch.nn.Module):
 
             sample_sorted_idxs = sampled_idxs[keep]
 
-            if(sample_sorted_idxs.shape[0] < num_neg):
+            print(sample_sorted_idxs.shape[0])
+
+            #if(sample_sorted_idxs.shape[0] < num_neg):
 
                 #resample and concat
-                extra_ids = subsample_negative_labels(sampled_idxs, num_neg-sample_sorted_idxs.shape[0])
-                sample_sorted_idxs.append(extra_ids)
+                #extra_ids = subsample_negative_labels(sampled_idxs, num_neg-sample_sorted_idxs.shape[0])
+                #sample_sorted_idxs.append(extra_ids)
 
             return sample_sorted_idxs           
 
 
     def _sample_proposals(
         self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor,has_gt, proposals_per_image, 
-        targets_per_image,features,img_idx,objectness_logits: torch.Tensor = None
+        targets_per_image,features,img_idx,match_quality_matrix,objectness_logits: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Based on the matching between N proposals and M groundtruth,
@@ -292,14 +294,14 @@ class ROIHeads(torch.nn.Module):
             gt_classes = torch.zeros_like(matched_idxs) + self.num_classes
 
         #returning all bg proposals, required num of neg
-        sampled_fg_idxs, sampled_bg_idxs,num_neg = subsample_labels(
-            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes, objectness_logits,'ohem')
+        sampled_fg_idxs, sampled_bg_idxs,num_neg = subsample_labels_iou(
+            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes, -1, 3, 0, match_quality_matrix, objectness_logits)
 
         #OHEM
         #sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
         
 
-        sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
+        #sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
        
         sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
 
@@ -374,7 +376,7 @@ class ROIHeads(torch.nn.Module):
             )
             matched_idxs, matched_labels = self.proposal_matcher(match_quality_matrix)
             sampled_idxs, gt_classes = self._sample_proposals(
-                matched_idxs, matched_labels, targets_per_image.gt_classes, has_gt,proposals_per_image, targets_per_image, features, img_idx , proposals_per_image.objectness_logits)
+                matched_idxs, matched_labels, targets_per_image.gt_classes, has_gt,proposals_per_image, targets_per_image, features, img_idx , match_quality_matrix, proposals_per_image.objectness_logits)
 
             # Set target attributes of the sampled proposals:
             proposals_per_image = proposals_per_image[sampled_idxs]
