@@ -1,6 +1,6 @@
 _BASE_: "../Base-RCNN-C4-OWOD.yaml"
 MODEL:
-  WEIGHTS: "/home/student/OWOD/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
+  WEIGHTS: "/home/u20020076/OWOD/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
 #  WEIGHTS: "/home/fk1/workspace/OWOD/output/expr_training_with_unk_with_clustering_Z_DIMENSION_256/model_final.pth"
 #  WEIGHTS: "/home/fk1/workspace/OWOD/output/t1_std_frcnn/model_final.pth"
 DATASETS:
