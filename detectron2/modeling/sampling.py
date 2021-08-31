@@ -3,11 +3,11 @@ import torch
 
 from detectron2.layers import nonzero_tuple
 
-__all__ = ["subsample_labels"]
+__all__ = ["subsample_labels","subsample_after_nms"]
 
 
 def subsample_labels(
-    labels: torch.Tensor, num_samples: int, positive_fraction: float, bg_label: int
+    labels: torch.Tensor, num_samples: int, positive_fraction: float, bg_label: int, all_prop = False
 ):
     """
     Return `num_samples` (or fewer, if not enough found)
@@ -21,7 +21,7 @@ def subsample_labels(
             * -1: ignore
             * bg_label: background ("negative") class
             * otherwise: one or more foreground ("positive") classes
-        num_samples (int): The total number of labels with value >= 0 to return.
+        num_samples (int): The total number of labels with value >= 0 to return.can be 
             Values that are not sampled will be filled with -1 (ignore).
         positive_fraction (float): The number of subsampled labels with values > 0
             is `min(num_positives, int(positive_fraction * num_samples))`. The number
@@ -45,10 +45,37 @@ def subsample_labels(
     # protect against not enough negative examples
     num_neg = min(negative.numel(), num_neg)
 
-    # randomly select positive and negative examples
+    if all_prop:
+        perm1 = torch.randperm(positive.numel(), device=positive.device)
+        perm2 = torch.randperm(negative.numel(), device=negative.device)
+    else:
+        # randomly select positive and negative examples
+        perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos]
+        perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg]
+
+    pos_idx = positive[perm1]
+    neg_idx = negative[perm2]
+    return pos_idx, neg_idx
+
+def subsample_after_nms(labels, num_samples, positive_fraction, bg_label):
+
+    positive = nonzero_tuple(labels != bg_label)[0]
+    negative = nonzero_tuple(labels == bg_label)[0]
+
+    num_pos = int(num_samples * positive_fraction)
+    # protect against not enough positive examples
+    num_pos = min(positive.numel(), num_pos)
+    num_neg = num_samples - num_pos
+    # protect against not enough negative examples
+    num_neg = min(negative.numel(), num_neg)
+
     perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos]
     perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg]
 
     pos_idx = positive[perm1]
     neg_idx = negative[perm2]
-    return pos_idx, neg_idx
+
+    return torch.cat([pos_idx, neg_idx],dim=0)
+
+
+

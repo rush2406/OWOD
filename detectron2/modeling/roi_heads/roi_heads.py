@@ -22,7 +22,7 @@ from ..backbone.resnet import BottleneckBlock, ResNet
 from ..matcher import Matcher
 from ..poolers import ROIPooler
 from ..proposal_generator.proposal_utils import add_ground_truth_to_proposals
-from ..sampling import subsample_labels
+from ..sampling import subsample_labels,subsample_after_nms
 from .box_head import build_box_head
 from .fast_rcnn import FastRCNNOutputLayers
 from .keypoint_head import build_keypoint_head
@@ -223,24 +223,12 @@ class ROIHeads(torch.nn.Module):
             gt_classes = torch.zeros_like(matched_idxs) + self.num_classes
 
         sampled_fg_idxs, sampled_bg_idxs = subsample_labels(
-            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes
+            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes,True
         )
 
         sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
         gt_classes_ss = gt_classes[sampled_idxs]
 
-        if self.enable_thresold_autolabelling:
-            matched_labels_ss = matched_labels[sampled_idxs]
-            pred_objectness_score_ss = objectness_logits[sampled_idxs]
-
-            # 1) Remove FG objectness score. 2) Sort and select top k. 3) Build and apply mask.
-            mask = torch.zeros((pred_objectness_score_ss.shape), dtype=torch.bool)
-            pred_objectness_score_ss[matched_labels_ss != 0] = -1
-            sorted_indices = list(zip(
-                *heapq.nlargest(self.unk_k, enumerate(pred_objectness_score_ss), key=operator.itemgetter(1))))[0]
-            for index in sorted_indices:
-                mask[index] = True
-            gt_classes_ss[mask] = self.num_classes - 1
 
         return sampled_idxs, gt_classes_ss
 
@@ -468,6 +456,7 @@ class Res5ROIHeads(ROIHeads):
 
         if self.training:
             assert targets
+            #get all proposals, no ratio
             proposals = self.label_and_sample_proposals(proposals, targets)
             ## Added nms stage after labelling
             for x in proposals:
@@ -478,7 +467,31 @@ class Res5ROIHeads(ROIHeads):
                 keep, soft_nms_scores = batched_soft_nms(boxes,scores,ids,'diou',0.5,0.5,0.001)
                 scores[keep] = soft_nms_scores
 
-                keep = keep[:self.post_nms_topk]
+                keep = keep[:self.post_nms_topk] #chooses 2000 proposals
+
+                x.proposal_boxes = x.proposal_boxes[keep]
+                scores = scores[keep]
+                ids = ids[keep]
+                x.gt_boxes = x.gt_boxes[keep]
+
+                indexes = subsample_after_nms(ids,self.batch_size_per_image, self.positive_fraction, self.num_classes)
+
+                x.proposal_boxes = x.proposal_boxes[indexes]
+                scores = scores[indexes]
+                ids = ids[indexes]
+                x.gt_boxes = x.gt_boxes[indexes]
+
+                if self.enable_thresold_autolabelling:
+                    pred_objectness_score_ss = scores
+
+                    # 1) Remove FG objectness score. 2) Sort and select top k. 3) Build and apply mask.
+                    mask = torch.zeros((pred_objectness_score_ss.shape), dtype=torch.bool)
+                    pred_objectness_score_ss[ids != self.num_classes] = -1
+                    sorted_indices = list(zip(
+                        *heapq.nlargest(self.unk_k, enumerate(pred_objectness_score_ss), key=operator.itemgetter(1))))[0]
+                    for index in sorted_indices:
+                        mask[index] = True
+                    ids[mask] = self.num_classes - 1
 
                 p = Instances(size)
                 p.proposal_boxes = x.proposal_boxes[keep]
@@ -489,6 +502,7 @@ class Res5ROIHeads(ROIHeads):
                 temp.append(p)
 
             proposals = temp
+            #TODO: here add sampling with ratio
 
         del targets 
 
