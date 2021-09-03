@@ -464,7 +464,10 @@ class Res5ROIHeads(ROIHeads):
                 ids = x.gt_classes
                 scores = x.objectness_logits
 
-                keep, soft_nms_scores = batched_soft_nms(boxes,scores,ids,'diou',0.5,0.5,0.001)
+                ids_binary = ids
+                ids_binary[ids_binary<80] = 1
+
+                keep, soft_nms_scores = batched_soft_nms(boxes,scores,ids_binary,'diou',0.5,0.5,0.001)
                 scores[keep] = soft_nms_scores
 
                 keep = keep[:self.post_nms_topk] #chooses 2000 proposals

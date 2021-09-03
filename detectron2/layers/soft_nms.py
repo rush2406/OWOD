@@ -296,6 +296,7 @@ def _soft_nms(
         #choosing different method for background and foreground class
         if(idxs_orig[top_idx]>=80):
             method = 'diou'
+            linear_threshold = 0.8
         else:
             method = 'linear'
 
