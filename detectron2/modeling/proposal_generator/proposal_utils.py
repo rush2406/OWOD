@@ -106,7 +106,7 @@ def find_top_rpn_proposals(
 
 
         #keep = batched_nms(boxes.tensor, scores_per_img, lvl, nms_thresh)
-        keep, soft_nms_scores = batched_soft_nms(boxes.tensor, scores_per_img, lvl,'diou',0.5,nms_thresh,0.001)
+        keep, soft_nms_scores = batched_soft_nms(boxes.tensor, scores_per_img, lvl,'gaussian',0.5,nms_thresh,0.001,True)
         scores_per_img[keep] = soft_nms_scores
 
         keep = keep[:post_nms_topk]  # keep is already sorted
