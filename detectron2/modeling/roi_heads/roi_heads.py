@@ -293,14 +293,8 @@ class ROIHeads(torch.nn.Module):
 
         #returning all bg proposals, required num of neg
         sampled_fg_idxs, sampled_bg_idxs,num_neg = subsample_labels(
-            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes, objectness_logits,'ohem')
-
-        #OHEM
-        #sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
+            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes, objectness_logits)
         
-
-        sampled_bg_idxs = self.apply_ohem(sampled_bg_idxs,gt_classes[sampled_bg_idxs],has_gt,proposals_per_image, targets_per_image,matched_idxs,features,img_idx,num_neg)
-       
         sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
 
         gt_classes_ss = gt_classes[sampled_idxs]

@@ -56,7 +56,7 @@ def compute_RDIoU(pred, target, eps=1e-7):
     return rho2 / c2
 
 
-def soft_nms(boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold):
+def soft_nms(boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold,rpn):
     """
     Performs soft non-maximum suppression algorithm on axis aligned boxes
     Args:
@@ -93,6 +93,7 @@ def soft_nms(boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prun
         gaussian_sigma,
         linear_threshold,
         prune_threshold,
+        rpn
     )
 
 
@@ -135,7 +136,7 @@ def soft_nms_rotated(boxes, scores, method, gaussian_sigma, linear_threshold, pr
 
 
 def batched_soft_nms(
-    boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold
+    boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold, rpn=False
 ):
     """
     Performs soft non-maximum suppression in a batched fashion.
@@ -180,7 +181,7 @@ def batched_soft_nms(
     #offsets = idxs.to(boxes) * (max_coordinate + 1)
     #boxes_for_nms = boxes + offsets[:, None]
     return soft_nms(
-        boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold
+        boxes, scores, idxs, method, gaussian_sigma, linear_threshold, prune_threshold,rpn
     )
 
 
@@ -245,6 +246,7 @@ def _soft_nms(
     gaussian_sigma,
     linear_threshold,
     prune_threshold,
+    rpn
 ):
     """
     Soft non-max suppression algorithm.
@@ -282,6 +284,7 @@ def _soft_nms(
     offsets = idxs.to(boxes) * (max_coordinate + 1)
     boxes = boxes + offsets[:, None]
     idxs_orig = idxs
+    count_unique = torch.unique(idxs_orig).shape[0]
 
     boxes = boxes.clone()
     scores = scores.clone()
@@ -292,10 +295,13 @@ def _soft_nms(
 
     while scores.numel() > 0:
         top_idx = torch.argmax(scores)
-        #if(idxs_orig[top_idx]==80):
-            #linear_threshold=0.4
-        #else:
-            #linear_threshold = 0.5
+
+        #choosing different method for background and foreground class
+        if(idxs_orig[top_idx]>=80 or (rpn and idxs_orig[top_idx]==0)):
+            method = 'diou'
+            linear_threshold = 0.8
+        else:
+            method = 'linear'
 
         idxs_out.append(idxs[top_idx].item())
         scores_out.append(scores[top_idx].item())
