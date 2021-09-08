@@ -245,6 +245,9 @@ _C.MODEL.RPN.NMS_THRESH = 0.7
 # ---------------------------------------------------------------------------- #
 # FCOS Head
 # ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# FCOS Head
+# ---------------------------------------------------------------------------- #
 _C.MODEL.FCOS = CN()
 
 # This is the number of foreground classes.
@@ -292,11 +295,12 @@ _C.MODEL.FCOS.USE_DEFORMABLE = False
 _C.MODEL.FCOS.NUM_CLS_CONVS = 4
 _C.MODEL.FCOS.NUM_BOX_CONVS = 4
 _C.MODEL.FCOS.NUM_SHARE_CONVS = 0
-_C.MODEL.FCOS.CENTER_SAMPLE = True
+_C.MODEL.FCOS.CENTER_SAMPLE = False
 _C.MODEL.FCOS.POS_RADIUS = 1.5
-_C.MODEL.FCOS.LOC_LOSS_TYPE = 'iou'
+_C.MODEL.FCOS.LOC_LOSS_TYPE = 'giou'
 _C.MODEL.FCOS.YIELD_PROPOSAL = False
 _C.MODEL.FCOS.YIELD_BOX_FEATURES = False
+
 
 # ---------------------------------------------------------------------------- #
 # ROI HEADS options

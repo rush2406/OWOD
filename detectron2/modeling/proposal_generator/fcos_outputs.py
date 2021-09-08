@@ -398,11 +398,13 @@ class FCOSOutputs(nn.Module):
         class_target = torch.zeros_like(instances.logits_pred)
         class_target[pos_inds, labels[pos_inds]] = 1
 
-        class_loss = F.binary_cross_entropy_with_logits(
+        class_loss = sigmoid_focal_loss_jit(
             instances.logits_pred,
             class_target,
+            alpha=self.focal_loss_alpha,
+            gamma=self.focal_loss_gamma,
             reduction="sum"
-            )
+        )
 
         if self.loss_normalizer_cls == "moving_fg":
             self.moving_num_fg = self.moving_num_fg_momentum * self.moving_num_fg + (
@@ -576,8 +578,8 @@ class FCOSOutputs(nn.Module):
             detections = torch.stack([
                 per_locations[:, 0] - per_box_regression[:, 0], #x0
                 per_locations[:, 1] - per_box_regression[:, 1], #y0
-                per_locations[:, 0] + per_box_regression[:, 2] - per_locations[:, 0] + per_box_regression[:, 0], #w
-                per_locations[:, 1] + per_box_regression[:, 3] - per_locations[:, 1] + per_box_regression[:, 1], #h
+                per_locations[:, 0] + per_box_regression[:, 2], #x1
+                per_locations[:, 1] + per_box_regression[:, 3], #y1
             ], dim=1)
 
             boxlist = Instances(image_sizes[i])
