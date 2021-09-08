@@ -18,6 +18,7 @@ from ..matcher import Matcher
 from ..sampling import subsample_labels
 from .build import PROPOSAL_GENERATOR_REGISTRY
 from .proposal_utils import find_top_rpn_proposals
+from .fcos_outputs import FCOSOutputs
 
 RPN_HEAD_REGISTRY = Registry("RPN_HEAD")
 RPN_HEAD_REGISTRY.__doc__ = """
@@ -92,11 +93,13 @@ class StandardRPNHead(nn.Module):
         # 3x3 conv for the hidden representation
         self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
         # 1x1 conv for predicting objectness logits
-        self.objectness_logits = nn.Conv2d(in_channels, num_anchors, kernel_size=1, stride=1)
+        self.objectness_logits = nn.Conv2d(in_channels, 2, kernel_size=1, stride=1)
+        # 1x1 conv for predicting objectness logits
+        self.centerness = nn.Conv2d(in_channels, 1, kernel_size=1, stride=1)
         # 1x1 conv for predicting box2box transform deltas
-        self.anchor_deltas = nn.Conv2d(in_channels, num_anchors * box_dim, kernel_size=1, stride=1)
+        self.anchor_deltas = nn.Conv2d(in_channels, box_dim, kernel_size=1, stride=1)
 
-        for l in [self.conv, self.objectness_logits, self.anchor_deltas]:
+        for l in [self.conv, self.objectness_logits,self.centerness,self.anchor_deltas]:
             nn.init.normal_(l.weight, std=0.01)
             nn.init.constant_(l.bias, 0)
 
@@ -132,11 +135,13 @@ class StandardRPNHead(nn.Module):
         """
         pred_objectness_logits = []
         pred_anchor_deltas = []
+        pred_centerness = []
         for x in features:
             t = F.relu(self.conv(x))
             pred_objectness_logits.append(self.objectness_logits(t))
+            pred_centerness.append(self.centerness(t))
             pred_anchor_deltas.append(self.anchor_deltas(t))
-        return pred_objectness_logits, pred_anchor_deltas
+        return pred_objectness_logits, pred_anchor_deltas, pred_centerness
 
 
 @PROPOSAL_GENERATOR_REGISTRY.register()
@@ -164,6 +169,8 @@ class RPN(nn.Module):
         loss_weight: Union[float, Dict[str, float]] = 1.0,
         box_reg_loss_type: str = "smooth_l1",
         smooth_l1_beta: float = 0.0,
+        cfg,
+        fpn_strides
     ):
         """
         NOTE: this interface is experimental.
@@ -216,6 +223,9 @@ class RPN(nn.Module):
         self.loss_weight = loss_weight
         self.box_reg_loss_type = box_reg_loss_type
         self.smooth_l1_beta = smooth_l1_beta
+        self.fcos_outputs = FCOSOutputs(cfg)
+        self.fpn_strides = fpn_strides
+        
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
@@ -234,6 +244,8 @@ class RPN(nn.Module):
             "box2box_transform": Box2BoxTransform(weights=cfg.MODEL.RPN.BBOX_REG_WEIGHTS),
             "box_reg_loss_type": cfg.MODEL.RPN.BBOX_REG_LOSS_TYPE,
             "smooth_l1_beta": cfg.MODEL.RPN.SMOOTH_L1_BETA,
+            "cfg": cfg,
+            "fpn_strides": cfg.MODEL.FCOS.FPN_STRIDES
         }
 
         ret["pre_nms_topk"] = (cfg.MODEL.RPN.PRE_NMS_TOPK_TRAIN, cfg.MODEL.RPN.PRE_NMS_TOPK_TEST)
@@ -244,6 +256,7 @@ class RPN(nn.Module):
             cfg.MODEL.RPN.IOU_THRESHOLDS, cfg.MODEL.RPN.IOU_LABELS, allow_low_quality_matches=True
         )
         ret["head"] = build_rpn_head(cfg, [input_shape[f] for f in in_features])
+        
         return ret
 
     def _subsample_labels(self, label):
@@ -399,6 +412,33 @@ class RPN(nn.Module):
         losses = {k: v * self.loss_weight.get(k, 1.0) for k, v in losses.items()}
         return losses
 
+    def compute_locations2(self,h, w, stride, device):
+
+        shifts_x = torch.arange(
+            0, w * stride, step=stride,
+            dtype=torch.float32, device=device
+        )
+        shifts_y = torch.arange(
+            0, h * stride, step=stride,
+            dtype=torch.float32, device=device
+        )
+        shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
+        shift_x = shift_x.reshape(-1)
+        shift_y = shift_y.reshape(-1)
+        locations = torch.stack((shift_x, shift_y), dim=1) + stride // 2
+        return locations
+
+    def compute_locations(self, features):
+        locations = []
+        for level, feature in enumerate(features):
+            h, w = feature.size()[-2:]
+            locations_per_level = self.compute_locations2(
+                h, w, self.fpn_strides[level],
+                feature.device
+            )
+            locations.append(locations_per_level)
+        return locations
+
     def forward(
         self,
         images: ImageList,
@@ -420,34 +460,21 @@ class RPN(nn.Module):
             loss: dict[Tensor] or None
         """
         features = [features[f] for f in self.in_features]
-        anchors = self.anchor_generator(features)
+        locations = self.compute_locations(features)
 
-        pred_objectness_logits, pred_anchor_deltas = self.rpn_head(features)
-        # Transpose the Hi*Wi*A dimension to the middle:
-        pred_objectness_logits = [
-            # (N, A, Hi, Wi) -> (N, Hi, Wi, A) -> (N, Hi*Wi*A)
-            score.permute(0, 2, 3, 1).flatten(1)
-            for score in pred_objectness_logits
-        ]
-        pred_anchor_deltas = [
-            # (N, A*B, Hi, Wi) -> (N, A, B, Hi, Wi) -> (N, Hi, Wi, A, B) -> (N, Hi*Wi*A, B)
-            x.view(x.shape[0], -1, self.anchor_generator.box_dim, x.shape[-2], x.shape[-1])
-            .permute(0, 3, 4, 1, 2)
-            .flatten(1, -2)
-            for x in pred_anchor_deltas
-        ]
+        pred_objectness_logits, pred_anchor_deltas, pred_centerness = self.rpn_head(features)
 
         if self.training:
             assert gt_instances is not None, "RPN requires gt_instances in training!"
-            gt_labels, gt_boxes = self.label_and_sample_anchors(anchors, gt_instances)
-            losses = self.losses(
-                anchors, pred_objectness_logits, gt_labels, pred_anchor_deltas, gt_boxes
+            #gt_labels, gt_boxes = self.label_and_sample_anchors(anchors, gt_instances)
+            extras, losses = self.fcos_outputs.losses(
+                pred_objectness_logits, pred_anchor_deltas, pred_centerness, locations, gt_instances
             )
         else:
             losses = {}
-        proposals = self.predict_proposals(
-            anchors, pred_objectness_logits, pred_anchor_deltas, images.image_sizes
-        )
+
+        proposals = self.fcos_outputs.predict_proposals(
+                pred_objectness_logits, pred_anchor_deltas, pred_centerness, locations, images.image_sizes)
 
         return proposals, losses
 

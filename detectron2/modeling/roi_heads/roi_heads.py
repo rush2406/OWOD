@@ -539,6 +539,9 @@ class Res5ROIHeads(ROIHeads):
 
         if self.training:
             assert targets
+
+            #print(proposals[0].get_fields())
+
             proposals = self.label_and_sample_proposals(proposals, targets,features)
 
         del targets
