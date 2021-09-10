@@ -143,7 +143,7 @@ _C.MODEL.FPN = CN()
 # Names of the input feature maps to be used by FPN
 # They must have contiguous power of 2 strides
 # e.g., ["res2", "res3", "res4", "res5"]
-_C.MODEL.FPN.IN_FEATURES = []
+_C.MODEL.FPN.IN_FEATURES = ["res2", "res3", "res4", "res5"]
 _C.MODEL.FPN.OUT_CHANNELS = 256
 
 # Options: "" (no norm), "GN"
@@ -251,7 +251,7 @@ _C.MODEL.RPN.NMS_THRESH = 0.7
 _C.MODEL.FCOS = CN()
 
 # This is the number of foreground classes.
-_C.MODEL.FCOS.NUM_CLASSES = 2
+_C.MODEL.FCOS.NUM_CLASSES = 1
 _C.MODEL.FCOS.IN_FEATURES = ["p3", "p4", "p5", "p6", "p7"]
 _C.MODEL.FCOS.FPN_STRIDES = [8, 16, 32, 64, 128]
 _C.MODEL.FCOS.PRIOR_PROB = 0.01
@@ -312,7 +312,7 @@ _C.MODEL.ROI_HEADS.NUM_CLASSES = 80
 # Names of the input feature maps to be used by ROI heads
 # Currently all heads (box, mask, ...) use the same input feature map list
 # e.g., ["p2", "p3", "p4", "p5"] is commonly used for FPN
-_C.MODEL.ROI_HEADS.IN_FEATURES = ["res4"]
+_C.MODEL.ROI_HEADS.IN_FEATURES = ["p2","p3","p4","p5"]
 # IOU overlap ratios [IOU_THRESHOLD]
 # Overlap threshold for an RoI to be considered background (if < IOU_THRESHOLD)
 # Overlap threshold for an RoI to be considered foreground (if >= IOU_THRESHOLD)
@@ -529,7 +529,7 @@ _C.MODEL.RETINANET.NORM = ""
 _C.MODEL.RESNETS = CN()
 
 _C.MODEL.RESNETS.DEPTH = 50
-_C.MODEL.RESNETS.OUT_FEATURES = ["res4"]  # res4 for C4 backbone, res2..5 for FPN backbone
+_C.MODEL.RESNETS.OUT_FEATURES = ["res2","res3","res4","res5"]  # res4 for C4 backbone, res2..5 for FPN backbone
 
 # Number of groups to use; 1 ==> ResNet; > 1 ==> ResNeXt
 _C.MODEL.RESNETS.NUM_GROUPS = 1

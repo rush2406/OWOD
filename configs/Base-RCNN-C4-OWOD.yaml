@@ -1,16 +1,21 @@
 MODEL:
   META_ARCHITECTURE: "GeneralizedRCNN"
-  RPN:
-    PRE_NMS_TOPK_TEST: 6000
-    POST_NMS_TOPK_TEST: 1000
-  ROI_HEADS:
-    #    NUM_CLASSES: 81 # 0-79 Known class; 80 -> Unknown; 81 -> Background.
-    NUM_CLASSES: 81
-    NAME: "Res5ROIHeads"
-  WEIGHTS: "/home/u20020076/OWOD/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
-  MASK_ON: False
+  BACKBONE:
+    NAME: "build_retinanet_resnet_fpn_backbone"
   RESNETS:
     DEPTH: 50
+    OUT_FEATURES: ["res2", "res3", "res4", "res5"]
+  WEIGHTS: "/home/u20020076/OWOD2/detectron2/ImageNetPretrained/MSRA/R-50.pkl"
+  FPN:
+    IN_FEATURES: ["res2", "res3", "res4", "res5"]
+  ROI_HEADS:
+    NAME: "StandardROIHeads"
+    NUM_CLASSES: 81
+    IN_FEATURES: ["p2", "p3", "p4", "p5"]
+  ROI_BOX_HEAD:
+    NAME: "FastRCNNConvFCHead"
+    NUM_FC: 2
+    POOLER_RESOLUTION: 7
 INPUT:
   MIN_SIZE_TRAIN: (480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800)
   MIN_SIZE_TEST: 800

@@ -233,6 +233,10 @@ def build_retinanet_resnet_fpn_backbone(cfg, input_shape: ShapeSpec):
     bottom_up = build_resnet_backbone(cfg, input_shape)
     in_features = cfg.MODEL.FPN.IN_FEATURES
     out_channels = cfg.MODEL.FPN.OUT_CHANNELS
+
+    print('*******************************************')
+    print(bottom_up.output_shape())
+    
     in_channels_p6p7 = bottom_up.output_shape()["res5"].channels
     backbone = FPN(
         bottom_up=bottom_up,

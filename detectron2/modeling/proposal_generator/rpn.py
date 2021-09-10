@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 from typing import Dict, List, Optional, Tuple, Union
 import torch
+import math
 import torch.nn.functional as F
 from fvcore.nn import giou_loss, smooth_l1_loss
 from torch import nn
@@ -63,6 +64,14 @@ def build_rpn_head(cfg, input_shape):
     """
     name = cfg.MODEL.RPN.HEAD_NAME
     return RPN_HEAD_REGISTRY.get(name)(cfg, input_shape)
+
+class Scale(nn.Module):
+    def __init__(self, init_value=1.0):
+        super(Scale, self).__init__()
+        self.scale = nn.Parameter(torch.FloatTensor([init_value]))
+
+    def forward(self, input):
+        return input * self.scale
 
 
 @RPN_HEAD_REGISTRY.register()
@@ -155,9 +164,9 @@ class RPN(nn.Module):
         self,
         *,
         in_features: List[str],
-        head: nn.Module,
-        anchor_generator: nn.Module,
-        anchor_matcher: Matcher,
+        #head: nn.Module,
+        #anchor_generator: nn.Module,
+        #anchor_matcher: Matcher,
         box2box_transform: Box2BoxTransform,
         batch_size_per_image: int,
         positive_fraction: float,
@@ -235,7 +244,7 @@ class RPN(nn.Module):
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
-        in_features = cfg.MODEL.RPN.IN_FEATURES
+        in_features = cfg.MODEL.FCOS.IN_FEATURES
         ret = {
             "in_features": in_features,
             "min_box_size": cfg.MODEL.PROPOSAL_GENERATOR.MIN_SIZE,
@@ -258,11 +267,11 @@ class RPN(nn.Module):
         ret["pre_nms_topk"] = (cfg.MODEL.RPN.PRE_NMS_TOPK_TRAIN, cfg.MODEL.RPN.PRE_NMS_TOPK_TEST)
         ret["post_nms_topk"] = (cfg.MODEL.RPN.POST_NMS_TOPK_TRAIN, cfg.MODEL.RPN.POST_NMS_TOPK_TEST)
 
-        ret["anchor_generator"] = build_anchor_generator(cfg, [input_shape[f] for f in in_features])
-        ret["anchor_matcher"] = Matcher(
-            cfg.MODEL.RPN.IOU_THRESHOLDS, cfg.MODEL.RPN.IOU_LABELS, allow_low_quality_matches=True
-        )
-        ret["head"] = build_rpn_head(cfg, [input_shape[f] for f in in_features])
+        #ret["anchor_generator"] = build_anchor_generator(cfg, [input_shape[f] for f in in_features])
+        #ret["anchor_matcher"] = Matcher(
+            #cfg.MODEL.RPN.IOU_THRESHOLDS, cfg.MODEL.RPN.IOU_LABELS, allow_low_quality_matches=True
+        #)
+        #ret["head"] = build_rpn_head(cfg, [input_shape[f] for f in in_features])
         
         return ret
 
@@ -451,6 +460,7 @@ class RPN(nn.Module):
         images: ImageList,
         features: Dict[str, torch.Tensor],
         gt_instances: Optional[List[Instances]] = None,
+        top_module = None
     ):
         """
         Args:
@@ -467,6 +477,7 @@ class RPN(nn.Module):
             loss: dict[Tensor] or None
         """
 
+        print("entered RPN****************************************************************")
         features = [features[f] for f in self.in_features]
         locations = self.compute_locations(features)
         logits_pred, reg_pred, ctrness_pred, top_feats, bbox_towers = self.fcos_head(
@@ -648,6 +659,8 @@ class FCOSHead(nn.Module):
         torch.nn.init.constant_(self.cls_logits.bias, bias_value)
 
     def forward(self, x, top_module=None, yield_bbox_towers=False):
+
+        print("FCOS head ************************************")
         logits = []
         bbox_reg = []
         ctrness = []

@@ -96,8 +96,7 @@ def compute_ious(pred, target):
 def compute_ctrness_targets(reg_targets):
     if len(reg_targets) == 0:
         return reg_targets.new_zeros(len(reg_targets))
-        print('************************************')
-    print(reg_targets.shape)
+    print('************************************')
     left_right = reg_targets[:, [0, 2]]
     top_bottom = reg_targets[:, [1, 3]]
     ctrness = (left_right.min(dim=-1)[0] / left_right.max(dim=-1)[0]) * \
@@ -330,6 +329,7 @@ class FCOSOutputs(nn.Module):
             dict[loss name -> loss value]: A dict mapping from loss name to loss value.
         """
 
+        print("losses******************************************")
         training_targets = self._get_ground_truth(locations, gt_instances)
 
         # Collect all logits and regression predictions over feature maps
@@ -398,6 +398,12 @@ class FCOSOutputs(nn.Module):
         class_target = torch.zeros_like(instances.logits_pred)
         class_target[pos_inds, labels[pos_inds]] = 1
 
+        #class_loss = F.binary_cross_entropy_with_logits(
+            #instances.logits_pred,
+            #class_target,
+            #reduction="sum"
+        #)
+
         class_loss = sigmoid_focal_loss_jit(
             instances.logits_pred,
             class_target,
@@ -462,6 +468,7 @@ class FCOSOutputs(nn.Module):
             self, logits_pred, reg_pred, ctrness_pred,
             locations, image_sizes, top_feats=None
     ):
+        print("Predict proposals ***************************")
         if self.training:
             self.pre_nms_thresh = self.pre_nms_thresh_train
             self.pre_nms_topk = self.pre_nms_topk_train
