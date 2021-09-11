@@ -539,9 +539,6 @@ class Res5ROIHeads(ROIHeads):
 
         if self.training:
             assert targets
-
-            #print(proposals[0].get_fields())
-
             proposals = self.label_and_sample_proposals(proposals, targets,features)
 
         del targets
@@ -624,6 +621,9 @@ class StandardROIHeads(ROIHeads):
         box_pooler: ROIPooler,
         box_head: nn.Module,
         box_predictor: nn.Module,
+        enable_clustering,
+        compute_energy_flag,
+        energy_save_path,
         mask_in_features: Optional[List[str]] = None,
         mask_pooler: Optional[ROIPooler] = None,
         mask_head: Optional[nn.Module] = None,
@@ -659,6 +659,9 @@ class StandardROIHeads(ROIHeads):
         self.box_pooler = box_pooler
         self.box_head = box_head
         self.box_predictor = box_predictor
+        self.enable_clustering = enable_clustering
+        self.compute_energy_flag = compute_energy_flag
+        self.energy_save_path = energy_save_path
 
         self.mask_on = mask_in_features is not None
         if self.mask_on:
@@ -698,6 +701,9 @@ class StandardROIHeads(ROIHeads):
         pooler_scales     = tuple(1.0 / input_shape[k].stride for k in in_features)
         sampling_ratio    = cfg.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
         pooler_type       = cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE
+        enable_clustering = cfg.OWOD.ENABLE_CLUSTERING
+        compute_energy_flag = cfg.OWOD.COMPUTE_ENERGY
+        energy_save_path = os.path.join(cfg.OUTPUT_DIR, cfg.OWOD.ENERGY_SAVE_PATH)
         # fmt: on
 
         # If StandardROIHeads is applied on multiple feature maps (as in FPN),
@@ -725,6 +731,9 @@ class StandardROIHeads(ROIHeads):
             "box_pooler": box_pooler,
             "box_head": box_head,
             "box_predictor": box_predictor,
+            "enable_clustering": enable_clustering,
+            "compute_energy_flag": compute_energy_flag,
+            "energy_save_path": energy_save_path
         }
 
     @classmethod
@@ -816,8 +825,8 @@ class StandardROIHeads(ROIHeads):
             # Usually the original proposals used by the box head are used by the mask, keypoint
             # heads. But when `self.train_on_pred_boxes is True`, proposals will contain boxes
             # predicted by the box head.
-            losses.update(self._forward_mask(features, proposals))
-            losses.update(self._forward_keypoint(features, proposals))
+            #losses.update(self._forward_mask(features, proposals))
+            #losses.update(self._forward_keypoint(features, proposals))
             return proposals, losses
         else:
             pred_instances = self._forward_box(features, proposals)
@@ -875,11 +884,16 @@ class StandardROIHeads(ROIHeads):
         features = [features[f] for f in self.box_in_features]
         box_features = self.box_pooler(features, [x.proposal_boxes for x in proposals])
         box_features = self.box_head(box_features)
+
         predictions = self.box_predictor(box_features)
-        del box_features
 
         if self.training:
-            losses = self.box_predictor.losses(predictions, proposals)
+            if self.enable_clustering:
+                self.box_predictor.update_feature_store(box_features, proposals)
+
+            if self.compute_energy_flag:
+                self.compute_energy(predictions, proposals)
+            losses = self.box_predictor.losses(predictions, proposals,box_features)
             # proposals is modified in-place below, so losses must be computed first.
             if self.train_on_pred_boxes:
                 with torch.no_grad():

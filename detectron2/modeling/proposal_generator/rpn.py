@@ -233,14 +233,17 @@ class RPN(nn.Module):
         #self.loss_weight = loss_weight
         #self.box_reg_loss_type = box_reg_loss_type
         #self.smooth_l1_beta = smooth_l1_beta
-        self.fcos_outputs = FCOSOutputs(cfg)
-        self.in_features = cfg.MODEL.FCOS.IN_FEATURES
-        self.fpn_strides = cfg.MODEL.FCOS.FPN_STRIDES
-        self.yield_proposal = cfg.MODEL.FCOS.YIELD_PROPOSAL
-        self.yield_box_feats = cfg.MODEL.FCOS.YIELD_BOX_FEATURES
 
-        self.fcos_head = FCOSHead(cfg, [input_shape[f] for f in self.in_features])
-        self.in_channels_to_top_module = self.fcos_head.in_channels_to_top_module        
+        self.device               = torch.device(cfg.MODEL.DEVICE)
+        self.in_features          = cfg.MODEL.FCOS.IN_FEATURES
+        self.fpn_strides          = cfg.MODEL.FCOS.FPN_STRIDES
+        self.yield_proposal       = cfg.MODEL.FCOS.YIELD_PROPOSAL
+
+        feature_shapes = [input_shape[f] for f in self.in_features]
+        self.fcos_head = FCOSHead(cfg, feature_shapes)
+        self.in_channels_to_top_module = self.fcos_head.in_channels_to_top_module
+        self.fcos_outputs = FCOSOutputs(cfg)
+        self.to(self.device)   
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
@@ -477,43 +480,36 @@ class RPN(nn.Module):
             loss: dict[Tensor] or None
         """
 
-        print("entered RPN****************************************************************")
         features = [features[f] for f in self.in_features]
         locations = self.compute_locations(features)
-        logits_pred, reg_pred, ctrness_pred, top_feats, bbox_towers = self.fcos_head(
-            features, top_module, self.yield_proposal or self.yield_box_feats
-        )
+        logits_pred, reg_pred, ctrness_pred, bbox_towers, top_feats = self.fcos_head(features, top_module)
+        
+        results = {}
+        if self.yield_proposal:
+            results["features"] = {
+                f: b for f, b in zip(self.in_features, bbox_towers)
+            }
 
         if self.training:
             results, losses = self.fcos_outputs.losses(
                 logits_pred, reg_pred, ctrness_pred,
                 locations, gt_instances, top_feats
             )
-
+            
             if self.yield_proposal:
                 with torch.no_grad():
                     results["proposals"] = self.fcos_outputs.predict_proposals(
                         logits_pred, reg_pred, ctrness_pred,
                         locations, images.image_sizes, top_feats
                     )
-            if self.yield_box_feats:
-                results["box_feats"] = {
-                    f: b for f, b in zip(self.in_features, bbox_towers)
-                }
             return results["proposals"], losses
         else:
             results = self.fcos_outputs.predict_proposals(
                 logits_pred, reg_pred, ctrness_pred,
                 locations, images.image_sizes, top_feats
             )
-            extras = {}
-            if self.yield_box_feats:
-                extras["box_feats"] = {
-                    f: b for f, b in zip(self.in_features, bbox_towers)
-                }
-            return results, extras
 
-        #################################################
+            return results, {}
 
 
     def predict_proposals(
@@ -577,17 +573,12 @@ class FCOSHead(nn.Module):
             in_channels (int): number of channels of the input feature
         """
         super().__init__()
-        # TODO: Implement the sigmoid version first.
         self.num_classes = cfg.MODEL.FCOS.NUM_CLASSES
         self.fpn_strides = cfg.MODEL.FCOS.FPN_STRIDES
-        head_configs = {"cls": (cfg.MODEL.FCOS.NUM_CLS_CONVS,
-                                cfg.MODEL.FCOS.USE_DEFORMABLE),
-                        "bbox": (cfg.MODEL.FCOS.NUM_BOX_CONVS,
-                                 cfg.MODEL.FCOS.USE_DEFORMABLE),
-                        "share": (cfg.MODEL.FCOS.NUM_SHARE_CONVS,
-                                  False)}
+        head_configs = {"cls": (cfg.MODEL.FCOS.NUM_CLS_CONVS, False),
+                        "bbox": (cfg.MODEL.FCOS.NUM_BOX_CONVS, cfg.MODEL.FCOS.USE_DEFORMABLE),
+                        "share": (cfg.MODEL.FCOS.NUM_SHARE_CONVS, cfg.MODEL.FCOS.USE_DEFORMABLE)}
         norm = None if cfg.MODEL.FCOS.NORM == "none" else cfg.MODEL.FCOS.NORM
-        self.num_levels = len(input_shape)
 
         in_channels = [s.channels for s in input_shape]
         assert len(set(in_channels)) == 1, "Each level must have the same channel!"
@@ -598,80 +589,52 @@ class FCOSHead(nn.Module):
         for head in head_configs:
             tower = []
             num_convs, use_deformable = head_configs[head]
+            if use_deformable:
+                conv_func = DFConv2d
+            else:
+                conv_func = nn.Conv2d
             for i in range(num_convs):
-                if use_deformable and i == num_convs - 1:
-                    conv_func = DFConv2d
-                else:
-                    conv_func = nn.Conv2d
-                tower.append(conv_func(
-                    in_channels, in_channels,
-                    kernel_size=3, stride=1,
-                    padding=1, bias=True
-                ))
+                tower.append(conv_func(in_channels, in_channels, kernel_size=3, stride=1, padding=1, bias=True))
                 if norm == "GN":
                     tower.append(nn.GroupNorm(32, in_channels))
-                elif norm == "NaiveGN":
-                    tower.append(NaiveGroupNorm(32, in_channels))
-                elif norm == "BN":
-                    tower.append(ModuleListDial([
-                        nn.BatchNorm2d(in_channels) for _ in range(self.num_levels)
-                    ]))
-                elif norm == "SyncBN":
-                    tower.append(ModuleListDial([
-                        NaiveSyncBatchNorm(in_channels) for _ in range(self.num_levels)
-                    ]))
                 tower.append(nn.ReLU())
-            self.add_module('{}_tower'.format(head),
-                            nn.Sequential(*tower))
+            self.add_module('{}_tower'.format(head), nn.Sequential(*tower))
 
-        self.cls_logits = nn.Conv2d(
-            in_channels, self.num_classes,
-            kernel_size=3, stride=1,
-            padding=1
-        )
-        self.bbox_pred = nn.Conv2d(
-            in_channels, 4, kernel_size=3,
-            stride=1, padding=1
-        )
-        self.ctrness = nn.Conv2d(
-            in_channels, 1, kernel_size=3,
-            stride=1, padding=1
-        )
+        self.cls_logits = nn.Conv2d(in_channels, self.num_classes, kernel_size=3, stride=1, padding=1)
+        self.bbox_pred  = nn.Conv2d(in_channels, 4, kernel_size=3, stride=1, padding=1, bias=False)
+        self.ctrness    = nn.Conv2d(in_channels, 1, kernel_size=3, stride=1, padding=1, bias=False)
 
         if cfg.MODEL.FCOS.USE_SCALE:
-            self.scales = nn.ModuleList([Scale(init_value=1.0) for _ in range(self.num_levels)])
+            self.scales = nn.ModuleList([Scale(init_value=1.0) for _ in self.fpn_strides])
         else:
             self.scales = None
 
-        for modules in [
-            self.cls_tower, self.bbox_tower,
-            self.share_tower, self.cls_logits,
-            self.bbox_pred, self.ctrness
-        ]:
+        for modules in [self.cls_tower, self.bbox_tower, self.share_tower, self.cls_logits]:
             for l in modules.modules():
                 if isinstance(l, nn.Conv2d):
                     torch.nn.init.normal_(l.weight, std=0.01)
                     torch.nn.init.constant_(l.bias, 0)
+
+        for modules in [self.bbox_pred, self.ctrness]:
+            for l in modules.modules():
+                if isinstance(l, nn.Conv2d):
+                    torch.nn.init.normal_(l.weight, std=0.01)
 
         # initialize the bias for focal loss
         prior_prob = cfg.MODEL.FCOS.PRIOR_PROB
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         torch.nn.init.constant_(self.cls_logits.bias, bias_value)
 
-    def forward(self, x, top_module=None, yield_bbox_towers=False):
-
-        print("FCOS head ************************************")
-        logits = []
-        bbox_reg = []
-        ctrness = []
-        top_feats = []
+    def forward(self, x, top_module=None):
+        logits      = []
+        bbox_reg    = []
+        ctrness     = []
+        top_feats   = []
         bbox_towers = []
         for l, feature in enumerate(x):
             feature = self.share_tower(feature)
             cls_tower = self.cls_tower(feature)
             bbox_tower = self.bbox_tower(feature)
-            if yield_bbox_towers:
-                bbox_towers.append(bbox_tower)
 
             logits.append(self.cls_logits(cls_tower))
             ctrness.append(self.ctrness(bbox_tower))
@@ -680,6 +643,8 @@ class FCOSHead(nn.Module):
                 reg = self.scales[l](reg)
             # Note that we use relu, as in the improved FCOS, instead of exp.
             bbox_reg.append(F.relu(reg))
+
             if top_module is not None:
                 top_feats.append(top_module(bbox_tower))
-        return logits, bbox_reg, ctrness, top_feats, bbox_towers
+
+        return logits, bbox_reg, ctrness, bbox_towers, top_feats

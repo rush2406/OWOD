@@ -644,6 +644,8 @@ class FastRCNNOutputLayers(nn.Module):
                 if len(item) == 0:
                     self.means[index] = None
                 else:
+                    print('&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&')
+                    print(item)
                     mu = torch.tensor(item).mean(dim=0)
                     self.means[index] = mu
             c_loss = self.clstr_loss_l2_cdist(input_features, proposals,mode)
