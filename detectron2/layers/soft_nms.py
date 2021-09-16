@@ -297,11 +297,8 @@ def _soft_nms(
         top_idx = torch.argmax(scores)
 
         #choosing different method for background and foreground class
-        if(idxs_orig[top_idx]>=80 or (rpn and idxs_orig[top_idx]==0)):
-            method = 'diou'
+        if(idxs_orig[top_idx]>=80):
             linear_threshold = 0.8
-        else:
-            method = 'linear'
 
         idxs_out.append(idxs[top_idx].item())
         scores_out.append(scores[top_idx].item())
