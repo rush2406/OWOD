@@ -873,10 +873,10 @@ class StandardROIHeads(ROIHeads):
         box_features = self.box_pooler(features, [x.proposal_boxes for x in proposals])
         box_features = self.box_head(box_features)
         predictions = self.box_predictor(box_features)
-        del box_features
 
         if self.training:
-            losses = self.box_predictor.losses(predictions, proposals)
+            losses = self.box_predictor.losses(predictions, proposals, box_features)
+            del box_features            
             # proposals is modified in-place below, so losses must be computed first.
             if self.train_on_pred_boxes:
                 with torch.no_grad():
@@ -887,6 +887,7 @@ class StandardROIHeads(ROIHeads):
                         proposals_per_image.proposal_boxes = Boxes(pred_boxes_per_image)
             return losses
         else:
+            del box_features
             pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             return pred_instances
 
